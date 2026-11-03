@@ -1,0 +1,8 @@
+[package]
+name = "utils"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+sys-locale.workspace = true

@@ -1,0 +1,18 @@
+[package]
+name = "remind-me"
+version = "0.1.0"
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "RemindMe"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+gpui-kit.workspace = true
+log.workspace = true
+rust-i18n.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+utils.workspace = true

@@ -1,0 +1,6 @@
+_version: 2
+app:
+  name:
+    en: Remind Me
+    zh-CN: 提醒我
+    zh-TW: 提醒我
