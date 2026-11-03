@@ -1,22 +1,27 @@
 use gpui_kit::{
-    InteractiveElement, ParentElement, Render, Role, StatefulInteractiveElement, Styled, Window,
+    InteractiveElement, ParentElement, Render, Role, StatefulInteractiveElement, Styled,
+    Subscription, Window,
     assets::IconName,
-    base::StyledExt,
     component::{
-        Sizable, TitleBar,
-        badge::Badge,
+        Sizable, Theme, TitleBar,
         button::{Button, ButtonVariants},
-        menu::AppMenuBar,
     },
     div,
     prelude::{Context, IntoElement},
 };
 
-pub struct RemindMe;
+pub struct RemindMe {
+    /// 系统明暗外观变化时同步主题。持有订阅，丢弃即取消。
+    _appearance_sub: Subscription,
+}
 
 impl RemindMe {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let _appearance_sub = cx.observe_window_appearance(window, |_, window, cx| {
+            Theme::sync_system_appearance(Some(window), cx);
+        });
+
+        Self { _appearance_sub }
     }
 }
 

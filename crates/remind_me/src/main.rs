@@ -3,7 +3,9 @@
 mod app;
 
 use gpui_kit::{
-    AppContext, WindowBounds, WindowOptions, base::Root, component::TitleBar, px, size,
+    AppContext, WindowBounds, WindowOptions,
+    component::{Theme, TitleBar},
+    px, size,
 };
 use log::error;
 use rust_i18n::t;
@@ -42,8 +44,8 @@ fn main() {
             if let Err(e) = gpui_kit::open_window(options, cx, |window, cx| {
                 let app_name = t!("app.name");
                 window.set_window_title(&app_name);
-                let view = cx.new(|_| RemindMe::new());
-                cx.new(|cx| Root::new(view, window, cx))
+                Theme::sync_system_appearance(Some(window), cx);
+                cx.new(|cx| RemindMe::new(window, cx))
             }) {
                 error!("failed to open window: {:?}", e);
                 cx.quit();
