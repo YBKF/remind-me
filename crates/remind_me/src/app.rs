@@ -17,6 +17,7 @@ pub struct RemindMe {
 
 impl RemindMe {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        // 订阅系统明暗外观变化，同步主题。
         let _appearance_sub = cx.observe_window_appearance(window, |_, window, cx| {
             Theme::sync_system_appearance(Some(window), cx);
         });

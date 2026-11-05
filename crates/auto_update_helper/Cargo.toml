@@ -1,0 +1,17 @@
+[package]
+name = "auto_update_helper"
+version = "0.1.0"
+edition.workspace = true
+description = "RemindMe auto update helper"
+publish.workspace = true
+
+[[bin]]
+name = "auto_update_helper"
+path = "src/auto_update_helper.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+
+[build-dependencies]
+winresource.workspace = true

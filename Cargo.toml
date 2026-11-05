@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/remind_me", "crates/utils"]
+members = ["crates/assets","crates/auto_update", "crates/auto_update_helper", "crates/remind_me", "crates/utils"]
 default-members = ["crates/remind_me"]
 
 [workspace.package]
@@ -9,16 +9,22 @@ publish = false
 
 [workspace.dependencies]
 anyhow = "1"
+clap = { version = "4", features = ["derive"] }
 gpui-kit = "0.9"
 log = "0.4"
+minisign-verify = "0.2"
 rust-i18n = "4"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+smol = "2"
 sys-locale = "0.3"
+thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+ureq = { version = "2", features = ["json"] }
 utils = { path = "crates/utils" }
+winresource = "0.1"
 
 [profile.release]
 strip = "symbols"

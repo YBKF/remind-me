@@ -1,5 +1,5 @@
 [package]
-name = "remind-me"
+name = "remind_me"
 version = "0.1.0"
 edition.workspace = true
 publish.workspace = true
@@ -16,3 +16,6 @@ rust-i18n.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 utils.workspace = true
+
+[build-dependencies]
+winresource.workspace = true
