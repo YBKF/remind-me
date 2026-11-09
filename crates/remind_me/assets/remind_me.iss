@@ -9,6 +9,15 @@ AppId={{9A5928B3-056C-4BA6-82F6-EFFEAABF2307}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
+; 安装包自身（Setup.exe）的版本资源信息。不显式指定时 FileVersion 为空，
+; 导致文件属性-详细信息中看不到版本信息。
+VersionInfoVersion={#AppVersion}
+VersionInfoProductVersion={#AppVersion}
+VersionInfoTextVersion={#AppVersion}
+VersionInfoCompany={#AppPublisher}
+VersionInfoProductName={#AppName}
+VersionInfoDescription={#AppName} Setup
+VersionInfoCopyright=Copyright (C) {#AppPublisher}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
