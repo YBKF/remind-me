@@ -519,9 +519,8 @@ dependencies = [
 
 [[package]]
 name = "auto_update"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
- "anyhow",
  "gpui-kit",
  "minisign-verify",
  "semver",
@@ -531,7 +530,6 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "ureq",
- "utils",
 ]
 
 [[package]]
@@ -5363,6 +5361,7 @@ name = "remind_me"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "auto_update",
  "gpui-kit",
  "log",
  "rust-i18n",

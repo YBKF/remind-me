@@ -1,14 +1,11 @@
 [package]
 name = "auto_update"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 publish.workspace = true
-
-[lib]
-path = "src/auto_update.rs"
+description = "Update checking and self-installation for GPUI applications"
 
 [dependencies]
-anyhow.workspace = true
 gpui-kit.workspace = true
 minisign-verify.workspace = true
 semver.workspace = true
@@ -18,4 +15,3 @@ smol.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 ureq.workspace = true
-utils.workspace = true

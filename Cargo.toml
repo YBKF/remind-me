@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/assets","crates/auto_update", "crates/auto_update_helper", "crates/remind_me", "crates/utils"]
+members = ["crates/assets", "crates/auto_update", "crates/auto_update_helper", "crates/remind_me", "crates/utils"]
 default-members = ["crates/remind_me"]
 
 [workspace.package]
@@ -9,6 +9,7 @@ publish = false
 
 [workspace.dependencies]
 anyhow = "1"
+auto_update = { path = "crates/auto_update" }
 clap = { version = "4", features = ["derive"] }
 gpui-kit = "0.9"
 log = "0.4"

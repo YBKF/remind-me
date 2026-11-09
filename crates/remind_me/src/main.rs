@@ -1,9 +1,11 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
+mod constants;
 
+use auto_update::{AutoUpdateConfig, AutoUpdater, InstallerConfig};
 use gpui_kit::{
-    AppContext, WindowBounds, WindowOptions,
+    App, AppContext, WindowBounds, WindowOptions,
     component::{Theme, TitleBar},
     px, size,
 };
@@ -11,9 +13,25 @@ use log::error;
 use rust_i18n::t;
 use utils::locale::detect_locale;
 
-use crate::app::RemindMe;
+use crate::{
+    app::RemindMe,
+    constants::{UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY},
+};
 
 rust_i18n::i18n!("../../locales", fallback = "en");
+
+/// 初始化自动更新。必须在打开窗口之前调用。
+fn init_auto_update(cx: &mut App) {
+    let mut config = AutoUpdateConfig::parse(env!("CARGO_PKG_VERSION"), UPDATE_MANIFEST_URL)
+        .expect("CARGO_PKG_VERSION 是合法 semver")
+        .with_installer(InstallerConfig::inno_setup());
+
+    if !UPDATE_PUBLIC_KEY.is_empty() {
+        config = config.with_public_key(UPDATE_PUBLIC_KEY);
+    }
+
+    AutoUpdater::init(cx, config);
+}
 
 fn main() {
     tracing_subscriber::fmt::init();
@@ -33,6 +51,7 @@ fn main() {
             rust_i18n::set_locale(&detect_locale(&available, &fallback));
 
             gpui_kit::init(cx);
+            init_auto_update(cx);
 
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::centered(size(px(960.), px(540.)), cx)),
