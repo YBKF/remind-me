@@ -81,6 +81,22 @@
 //! 检查与下载与平台无关；「自动安装」由 [`InstallerConfig`] 描述，库不假设
 //! 安装包格式。Windows 上覆盖正在运行的程序需要先退出，因此默认在
 //! [`InstallTiming::OnQuit`] 时安装。
+//!
+//! # 全局安装与用户安装
+//!
+//! 同一个安装包通常既能装到 `Program Files`（全局），也能装到
+//! `%LOCALAPPDATA%\Programs`（当前用户）。更新时必须沿用原有的安装范围，
+//! 否则用户级安装会被要求提权、全局安装会被装进用户目录。
+//!
+//! [`InstallerConfig::inno_setup`]、[`InstallerConfig::nsis`]、
+//! [`InstallerConfig::msi`] 都已内置这个判断：安装前用
+//! [`InstallScope::detect`] 推断当前程序的位置，再追加
+//! [`ScopeArgs`] 里对应的参数（Inno Setup 是 `/CURRENTUSER` / `/ALLUSERS`）。
+//! 需要固定范围时用 [`InstallerConfig::inno_setup_per_user`] /
+//! [`InstallerConfig::inno_setup_all_users`]。
+//!
+//! 注意：全局安装的更新会弹出 UAC，请确保安装脚本开启了
+//! `PrivilegesRequiredOverridesAllowed=commandline`。
 
 mod config;
 mod download;
@@ -94,7 +110,8 @@ pub use config::AutoUpdateConfig;
 pub use download::DownloadProgress;
 pub use error::AutoUpdateError;
 pub use install::{
-    InstallHandler, InstallRequest, InstallTiming, InstallerConfig, InstallerProgram,
+    InstallHandler, InstallRequest, InstallScope, InstallTiming, InstallerConfig, InstallerProgram,
+    ScopeArgs,
 };
 pub use manifest::{platform_key, parse_version, ReleaseAsset, ReleaseManifest};
 pub use updater::{

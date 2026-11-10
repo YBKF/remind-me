@@ -3,6 +3,15 @@
 //! 库本身不假设安装包格式。常见形态通过 [`InstallerConfig`] 的构造函数
 //! 覆盖（Inno Setup / NSIS / MSI / 自带 helper），特殊流程用
 //! [`InstallerConfig::custom`] 自行实现。
+//!
+//! # 全局安装 / 用户安装
+//!
+//! 同一个安装包通常既能装到 `Program Files`（全局，需要管理员权限），也能
+//! 装到 `%LOCALAPPDATA%\Programs`（当前用户）。更新时必须沿用原来的安装范围，
+//! 否则会出现「用户级安装被要求提权」或者「全局安装被装进用户目录」。
+//!
+//! [`InstallerConfig::inno_setup`] 等构造函数默认带上 [`ScopeArgs`]，执行安装前
+//! 用 [`InstallScope::detect`] 判断当前程序的位置，再追加对应参数。
 
 use std::{
     fmt,
@@ -26,6 +35,90 @@ pub enum InstallTiming {
     OnQuit,
     /// 下载完成（或调用 `install_update`）后立刻执行。
     Immediately,
+}
+
+/// 安装范围。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InstallScope {
+    /// 全局安装（所有用户），通常位于 `Program Files`，安装需要管理员权限。
+    PerMachine,
+    /// 当前用户安装，通常位于 `%LOCALAPPDATA%\Programs`，无需提权。
+    PerUser,
+}
+
+impl InstallScope {
+    /// 根据当前可执行文件的位置推断已有的安装范围。
+    ///
+    /// 依次尝试：
+    ///
+    /// 1. 与系统已知目录比对（`Program Files` / `%LOCALAPPDATA%\Programs` /
+    ///    `/Applications` / `/usr` / `~/.local` …），命中即返回；
+    /// 2. 兜底探测：能写入可执行文件所在目录说明是用户级安装，
+    ///    否则按全局安装处理。
+    ///
+    /// 如果安装到自定义目录（例如 `D:\Apps\RemindMe`），推断只能靠第 2 步，
+    /// 可能不准。这类场景请用明确范围的构造函数，或自行调用
+    /// [`InstallerConfig::with_scope_args`] / 实现 [`InstallHandler`]。
+    pub fn detect() -> Self {
+        if let Ok(exe) = std::env::current_exe()
+            && let Some(scope) = scope_from_roots(&exe, &known_roots())
+        {
+            return scope;
+        }
+
+        match std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(Path::to_path_buf))
+        {
+            Some(dir) if dir_writable(&dir) => Self::PerUser,
+            _ => Self::PerMachine,
+        }
+    }
+
+    /// 是否为全局安装。
+    pub fn is_per_machine(self) -> bool {
+        matches!(self, Self::PerMachine)
+    }
+}
+
+/// 安装范围对应的命令行参数。
+///
+/// 不同安装器的写法不一样，所以由调用方（或内置构造函数）提供：
+/// Inno Setup 用 `/CURRENTUSER` / `/ALLUSERS`，MSI 用 `ALLUSERS=2` / `ALLUSERS=1`。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ScopeArgs {
+    /// 用户级安装时追加的参数。
+    pub per_user: Vec<String>,
+    /// 全局安装时追加的参数。
+    pub per_machine: Vec<String>,
+}
+
+impl ScopeArgs {
+    /// 创建参数映射。
+    pub fn new<U, M, S>(per_user: U, per_machine: M) -> Self
+    where
+        U: IntoIterator<Item = S>,
+        M: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        Self {
+            per_user: per_user.into_iter().map(Into::into).collect(),
+            per_machine: per_machine.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    /// 取某个安装范围对应的参数。
+    pub fn for_scope(&self, scope: InstallScope) -> &[String] {
+        match scope {
+            InstallScope::PerUser => &self.per_user,
+            InstallScope::PerMachine => &self.per_machine,
+        }
+    }
+
+    /// 两个范围都没有参数。
+    pub fn is_empty(&self) -> bool {
+        self.per_user.is_empty() && self.per_machine.is_empty()
+    }
 }
 
 /// 要运行的程序。
@@ -55,6 +148,8 @@ pub struct InstallRequest {
     pub installer_path: PathBuf,
     /// 该安装包对应的版本。
     pub version: Version,
+    /// 推断出的当前安装范围，供自定义实现决定如何安装。
+    pub scope: InstallScope,
 }
 
 /// 下载完成后的安装策略。
@@ -73,6 +168,8 @@ pub enum InstallerConfig {
         program: InstallerProgram,
         /// 命令行参数，`{installer}` 会替换为安装包路径。
         args: Vec<String>,
+        /// 执行前根据当前安装位置追加的参数。
+        scope_args: ScopeArgs,
         /// 执行时机。
         timing: InstallTiming,
         /// 先把程序复制到该目录再运行。
@@ -93,6 +190,7 @@ impl fmt::Debug for InstallerConfig {
             Self::Command {
                 program,
                 args,
+                scope_args,
                 timing,
                 relocate_to,
                 hide_console,
@@ -100,6 +198,7 @@ impl fmt::Debug for InstallerConfig {
                 .debug_struct("Command")
                 .field("program", program)
                 .field("args", args)
+                .field("scope_args", scope_args)
                 .field("timing", timing)
                 .field("relocate_to", relocate_to)
                 .field("hide_console", hide_console)
@@ -119,6 +218,7 @@ impl InstallerConfig {
         Self::Command {
             program: InstallerProgram::Downloaded,
             args: args.into_iter().map(Into::into).collect(),
+            scope_args: ScopeArgs::default(),
             timing: InstallTiming::OnQuit,
             relocate_to: None,
             hide_console: true,
@@ -134,35 +234,66 @@ impl InstallerConfig {
         Self::Command {
             program: InstallerProgram::Path(program.into()),
             args: args.into_iter().map(Into::into).collect(),
+            scope_args: ScopeArgs::default(),
             timing: InstallTiming::OnQuit,
             relocate_to: None,
             hide_console: true,
         }
     }
 
-    /// Inno Setup 静默安装（当前用户）。
+    /// Inno Setup 静默安装，**自动沿用当前安装范围**。
+    ///
+    /// 程序装在 `Program Files` 时传 `/ALLUSERS`（会触发 UAC）；
+    /// 装在用户目录时传 `/CURRENTUSER`（不需要提权）。
+    ///
+    /// 需要安装脚本里设置
+    /// `PrivilegesRequiredOverridesAllowed=commandline dialog`，
+    /// 否则命令行参数会被忽略。
     pub fn inno_setup() -> Self {
+        Self::run_downloaded(["/SILENT"]).with_scope_args(ScopeArgs::new(
+            ["/CURRENTUSER"],
+            ["/ALLUSERS"],
+        ))
+    }
+
+    /// Inno Setup 静默安装（强制当前用户，不需要提权）。
+    pub fn inno_setup_per_user() -> Self {
         Self::run_downloaded(["/SILENT", "/CURRENTUSER"])
     }
 
-    /// Inno Setup 静默安装（所有用户，需要管理员权限）。
+    /// Inno Setup 静默安装（强制所有用户，需要管理员权限）。
     pub fn inno_setup_all_users() -> Self {
         Self::run_downloaded(["/SILENT", "/ALLUSERS"])
     }
 
-    /// NSIS 静默安装。
+    /// NSIS 静默安装，自动沿用当前安装范围。
     pub fn nsis() -> Self {
-        Self::run_downloaded(["/S"])
+        Self::run_downloaded(["/S"]).with_scope_args(ScopeArgs::new(
+            Vec::<&str>::new(),
+            ["/ALLUSERS"],
+        ))
     }
 
-    /// MSI 静默安装。
+    /// MSI 静默安装，自动沿用当前安装范围。
     pub fn msi() -> Self {
         Self::run_downloaded(["/qn", "/norestart"])
+            .with_scope_args(ScopeArgs::new(["ALLUSERS=2"], ["ALLUSERS=1"]))
     }
 
     /// 使用自定义安装钩子。
     pub fn custom(handler: impl InstallHandler) -> Self {
         Self::Custom(Arc::new(handler))
+    }
+
+    /// 设置按安装范围追加的参数。
+    pub fn with_scope_args(mut self, scope_args: ScopeArgs) -> Self {
+        if let Self::Command {
+            scope_args: slot, ..
+        } = &mut self
+        {
+            *slot = scope_args;
+        }
+        self
     }
 
     /// 修改执行时机。
@@ -210,10 +341,12 @@ pub(crate) fn execute(
         InstallerConfig::Custom(handler) => handler.install(&InstallRequest {
             installer_path: installer_path.to_path_buf(),
             version: version.clone(),
+            scope: InstallScope::detect(),
         }),
         InstallerConfig::Command {
             program,
             args,
+            scope_args,
             relocate_to,
             hide_console,
             ..
@@ -249,6 +382,15 @@ pub(crate) fn execute(
                     arg.clone()
                 });
             }
+
+            // 全局安装 / 用户安装必须和当前安装保持一致，否则会出现
+            // 「用户级安装被要求提权」或「全局安装被装进用户目录」。
+            if !scope_args.is_empty() {
+                let scope = InstallScope::detect();
+                command.args(scope_args.for_scope(scope));
+                info!("update install scope: {scope:?}");
+            }
+
             if *hide_console {
                 hide_console_window(&mut command);
             }
@@ -282,6 +424,92 @@ fn resolve_program(path: &Path) -> PathBuf {
     }
 }
 
+/// 系统上「全局安装」与「用户级安装」的典型目录。
+fn known_roots() -> Vec<(PathBuf, InstallScope)> {
+    let mut roots = Vec::new();
+
+    #[cfg(windows)]
+    {
+        for var in ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"] {
+            if let Some(dir) = std::env::var_os(var) {
+                roots.push((PathBuf::from(dir), InstallScope::PerMachine));
+            }
+        }
+        if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
+            roots.push((
+                PathBuf::from(dir).join("Programs"),
+                InstallScope::PerUser,
+            ));
+        }
+        if let Some(dir) = std::env::var_os("APPDATA") {
+            roots.push((PathBuf::from(dir), InstallScope::PerUser));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        roots.push((PathBuf::from("/Applications"), InstallScope::PerMachine));
+        if let Some(home) = std::env::var_os("HOME") {
+            roots.push((
+                PathBuf::from(home).join("Applications"),
+                InstallScope::PerUser,
+            ));
+        }
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        for dir in ["/usr", "/opt"] {
+            roots.push((PathBuf::from(dir), InstallScope::PerMachine));
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            roots.push((PathBuf::from(home).join(".local"), InstallScope::PerUser));
+        }
+    }
+
+    roots
+}
+
+/// 在候选目录里找出最深的匹配项（`/opt/app` 优先于 `/opt`）。
+fn scope_from_roots(exe: &Path, roots: &[(PathBuf, InstallScope)]) -> Option<InstallScope> {
+    let mut best: Option<(usize, InstallScope)> = None;
+    for (root, scope) in roots {
+        if !path_starts_with(exe, root) {
+            continue;
+        }
+        let depth = root.components().count();
+        if best.is_none_or(|(best_depth, _)| depth > best_depth) {
+            best = Some((depth, *scope));
+        }
+    }
+    best.map(|(_, scope)| scope)
+}
+
+#[cfg(windows)]
+fn path_starts_with(path: &Path, root: &Path) -> bool {
+    // Windows 路径大小写不敏感，`C:\PROGRAM FILES` 与 `C:\Program Files` 视为同一目录。
+    let path = PathBuf::from(path.to_string_lossy().to_lowercase());
+    let root = PathBuf::from(root.to_string_lossy().to_lowercase());
+    path.starts_with(&root)
+}
+
+#[cfg(not(windows))]
+fn path_starts_with(path: &Path, root: &Path) -> bool {
+    path.starts_with(root)
+}
+
+/// 目录是否可写（推断不了安装位置时的兜底判断）。
+fn dir_writable(dir: &Path) -> bool {
+    let probe = dir.join(format!(".auto-update-probe-{}", std::process::id()));
+    match std::fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
 #[cfg(windows)]
 fn hide_console_window(command: &mut Command) {
     use std::os::windows::process::CommandExt;
@@ -291,3 +519,56 @@ fn hide_console_window(command: &mut Command) {
 
 #[cfg(not(windows))]
 fn hide_console_window(_command: &mut Command) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deepest_root_wins() {
+        let roots = vec![
+            (PathBuf::from("/opt"), InstallScope::PerMachine),
+            (PathBuf::from("/opt/app"), InstallScope::PerUser),
+        ];
+        assert_eq!(
+            scope_from_roots(Path::new("/opt/app/bin/app.exe"), &roots),
+            Some(InstallScope::PerUser)
+        );
+        assert_eq!(
+            scope_from_roots(Path::new("/opt/other/app.exe"), &roots),
+            Some(InstallScope::PerMachine)
+        );
+        assert_eq!(scope_from_roots(Path::new("/home/user/app.exe"), &roots), None);
+    }
+
+    #[test]
+    fn scope_args_select_flags() {
+        let args = ScopeArgs::new(["/CURRENTUSER"], ["/ALLUSERS"]);
+        assert_eq!(args.for_scope(InstallScope::PerUser), ["/CURRENTUSER"]);
+        assert_eq!(args.for_scope(InstallScope::PerMachine), ["/ALLUSERS"]);
+        assert!(!args.is_empty());
+        assert!(ScopeArgs::default().is_empty());
+    }
+
+    #[test]
+    fn inno_setup_matches_install_scope() {
+        let InstallerConfig::Command {
+            args, scope_args, ..
+        } = InstallerConfig::inno_setup()
+        else {
+            panic!("inno_setup 应该是 Command 策略");
+        };
+        assert_eq!(args, vec!["/SILENT".to_string()]);
+        assert_eq!(scope_args.per_user, vec!["/CURRENTUSER".to_string()]);
+        assert_eq!(scope_args.per_machine, vec!["/ALLUSERS".to_string()]);
+    }
+
+    #[test]
+    fn explicit_scope_does_not_append_extra_args() {
+        let InstallerConfig::Command { scope_args, .. } = InstallerConfig::inno_setup_all_users()
+        else {
+            panic!("inno_setup_all_users 应该是 Command 策略");
+        };
+        assert!(scope_args.is_empty());
+    }
+}
