@@ -1,45 +1,30 @@
-//! 面向 [GPUI](https://gpui.rs) 应用的更新检查与自动安装。
+//! GPUI 应用的更新检查与自动安装
 //!
-//! 设计目标与 Zed 的 `auto_update` 类似：应用只负责「展示状态」和「触发动作」，
-//! 检查清单、比较版本、下载、校验签名、退出时安装这些琐事全部交给本库。
+//! 主程序只需要三步：
 //!
-//! # 快速开始
+//! 1. 用 `AutoUpdateConfig::builder()` 描述清单地址、公钥与安装方式
+//! 2. 调用 [`AutoUpdater::init`] 创建更新器并注册为全局单例
+//! 3. 订阅 [`AutoUpdateEvent`]，用 [`AutoUpdater::status`] 与
+//!    [`AutoUpdater::download_progress`] 渲染
 //!
 //! ```no_run
 //! use auto_update::{AutoUpdateConfig, AutoUpdater, InstallerConfig};
 //! use gpui_kit::App;
+//! use semver::Version;
 //!
 //! pub fn init_updater(cx: &mut App) {
-//!     let config = AutoUpdateConfig::parse(
-//!             env!("CARGO_PKG_VERSION"),
-//!             "https://example.com/releases/version.json",
-//!         )
-//!         .expect("CARGO_PKG_VERSION 必然是合法 semver")
-//!         .with_public_key("RWQf...minisign 公钥...")
-//!         .with_installer(InstallerConfig::inno_setup());
+//!     let config = AutoUpdateConfig::builder()
+//!         .current_version(Version::new(0, 1, 0))
+//!         .manifest_url("https://example.com/version.json")
+//!         .public_key("RWQf...minisign 公钥...")
+//!         .installer_config(InstallerConfig::inno_setup())
+//!         .build();
 //!
-//!     // 创建并注册为全局单例，默认会立即检查一次更新。
-//!     let _updater = AutoUpdater::init(cx, config);
+//!     AutoUpdater::init(cx, config);
 //! }
 //! ```
 //!
-//! 在视图里订阅事件即可驱动 UI（`AutoUpdater` 是实体，`cx.subscribe` 可用）：
-//!
-//! ```ignore
-//! cx.subscribe(&updater, |this, updater, event: &AutoUpdateEvent, cx| {
-//!     match event {
-//!         AutoUpdateEvent::StatusChanged(status) => { /* 切换按钮文案 */ }
-//!         AutoUpdateEvent::Progress(progress) => {
-//!             // progress.fraction() 可能为 None（服务端没给 Content-Length）
-//!             let _ = progress.fraction();
-//!         }
-//!     }
-//!     cx.notify();
-//! })
-//! .detach();
-//! ```
-//!
-//! # 生命周期
+//! # 状态流转
 //!
 //! ```text
 //! Idle ──check_for_update──▶ Checking ──┬─▶ UpdateAvailable ──download_update──▶ Downloading ──▶ Downloaded
@@ -49,79 +34,50 @@
 //!                                                                                                  Installing
 //! ```
 //!
-//! 任何一步失败都会进入 `Failed { error }`，可通过 [`AutoUpdater::reset`] 重来。
+//! 任一步失败进入 `Failed { error }`，可用 [`AutoUpdater::reset`] 重来
 //!
-//! # 错误处理约定
+//! # 错误约定
 //!
-//! * **同步前置错误**（没有可用更新、已有任务在跑、未配置安装策略）由
-//!   `check_for_update` / `download_update` / `install_update` 直接返回
-//!   [`AutoUpdateError`]。
-//! * **异步错误**（网络、解析、签名校验）通过
-//!   [`AutoUpdateStatus::Failed`] 与 [`AutoUpdateEvent::StatusChanged`] 通知，
-//!   同时写入 `tracing` 日志。
+//! 同步前置错误（没有可用更新、已有任务执行、未配置安装方式）由
+//! `check_for_update`、`download_update`、`install_update` 直接返回
+//! [`AutoUpdateError`]；网络、解析、签名等异步错误通过
+//! [`AutoUpdateStatus::Failed`] 与 [`AutoUpdateEvent::StatusChanged`] 通知，
+//! 同时写入 `tracing` 日志
 //!
 //! # 版本清单
 //!
-//! 格式与 Zed / Tauri 兼容，平台键可以任意扩展，详见 [`ReleaseManifest`]：
-//!
-//! ```json
-//! {
-//!   "version": "v1.2.3",
-//!   "notes": "修复了一些问题",
-//!   "pub_date": "2026-11-06T17:02:20+08:00",
-//!   "platforms": {
-//!     "windows-x86_64": { "url": "https://.../Setup.exe", "signature": "..." },
-//!     "darwin-aarch64": { "url": "https://.../App.dmg",   "signature": "..." }
-//!   }
-//! }
-//! ```
-//!
-//! # 平台支持
-//!
-//! 检查与下载与平台无关；「自动安装」由 [`InstallerConfig`] 描述，库不假设
-//! 安装包格式。Windows 上覆盖正在运行的程序需要先退出，因此默认在
-//! [`InstallTiming::OnQuit`] 时安装。
+//! 格式与 Zed、Tauri 兼容，平台键可任意扩展，见 [`ReleaseManifest`]
 //!
 //! # 全局安装与用户安装
 //!
-//! 同一个安装包通常既能装到 `Program Files`（全局），也能装到
-//! `%LOCALAPPDATA%\Programs`（当前用户）。更新时必须沿用原有的安装范围，
-//! 否则用户级安装会被要求提权、全局安装会被装进用户目录。
+//! 同一个安装包既能装到 `Program Files` 也能装到 `%LOCALAPPDATA%\Programs`，
+//! 更新时必须沿用原有范围，否则用户级安装会要求提权、全局安装会装进用户目录
 //!
 //! [`InstallerConfig::inno_setup`]、[`InstallerConfig::nsis`]、
-//! [`InstallerConfig::msi`] 都已内置这个判断：安装前用
-//! [`InstallScope::detect`] 推断当前程序的位置，再追加
-//! [`ScopeArgs`] 里对应的参数（Inno Setup 是 `/CURRENTUSER` / `/ALLUSERS`）。
-//! 需要固定范围时用 [`InstallerConfig::inno_setup_per_user`] /
-//! [`InstallerConfig::inno_setup_all_users`]。
+//! [`InstallerConfig::msi`] 已内置判断：安装前用 [`InstallScope::detect`]
+//! 推断当前 exe 的位置，再追加对应的参数
 //!
-//! 注意：全局安装的更新会弹出 UAC，请确保安装脚本开启了
-//! `PrivilegesRequiredOverridesAllowed=commandline`。
+//! # 平台支持
+//!
+//! 检查与下载与平台无关；安装由 [`InstallerConfig`] 描述，库不假设安装包格式
+//! 与安装器类型。Windows 上覆盖正在运行的 exe 需要先退出，因此默认在
+//! [`InstallTiming::OnQuit`] 时安装
 
 mod config;
 mod download;
 mod error;
-mod install;
+mod installer;
 mod manifest;
 mod updater;
-mod verify;
 
 pub use config::AutoUpdateConfig;
 pub use download::DownloadProgress;
 pub use error::AutoUpdateError;
-pub use install::{
-    InstallHandler, InstallRequest, InstallScope, InstallTiming, InstallerConfig, InstallerProgram,
-    ScopeArgs,
-};
-pub use manifest::{platform_key, parse_version, ReleaseAsset, ReleaseManifest};
-pub use updater::{
-    AutoUpdateEvent, AutoUpdateStatus, AutoUpdater, AvailableUpdate, GlobalAutoUpdater,
-};
+pub use installer::{InstallScope, InstallTiming, InstallerConfig};
+pub use manifest::{ReleaseAsset, ReleaseManifest, platform_key};
+pub use updater::{AutoUpdateEvent, AutoUpdateStatus, AutoUpdater, AvailableUpdate};
 
-/// 本 crate 的 `Result` 别名。
-pub type Result<T, E = AutoUpdateError> = std::result::Result<T, E>;
-
-/// 重新导出 [`semver`]，方便调用方不多引入一个依赖。
+/// 版本号类型，避免调用方额外依赖 `semver`
 pub use semver;
-/// 重新导出 [`ureq`]，方便自定义 `Agent`（代理、证书等）。
+/// HTTP 客户端类型，用于 [`AutoUpdateConfig::builder`] 的自定义 agent
 pub use ureq;

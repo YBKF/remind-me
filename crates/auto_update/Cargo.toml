@@ -1,11 +1,12 @@
 [package]
 name = "auto_update"
-version = "0.2.0"
+version = "0.3.0"
 edition.workspace = true
-publish.workspace = true
 description = "Update checking and self-installation for GPUI applications"
+publish.workspace = true
 
 [dependencies]
+bon.workspace = true
 gpui-kit.workspace = true
 minisign-verify.workspace = true
 semver.workspace = true

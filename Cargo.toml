@@ -10,6 +10,7 @@ publish = false
 [workspace.dependencies]
 anyhow = "1"
 auto_update = { path = "crates/auto_update" }
+bon = "3"
 clap = { version = "4", features = ["derive"] }
 gpui-kit = "0.9"
 log = "0.4"

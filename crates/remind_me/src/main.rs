@@ -3,7 +3,7 @@
 mod app;
 mod constants;
 
-use auto_update::{AutoUpdateConfig, AutoUpdater, InstallerConfig};
+use auto_update::{AutoUpdateConfig, AutoUpdater, InstallerConfig, semver::Version};
 use gpui_kit::{
     App, AppContext, WindowBounds, WindowOptions,
     component::{Theme, TitleBar},
@@ -20,15 +20,19 @@ use crate::{
 
 rust_i18n::i18n!("../../locales", fallback = "en");
 
-/// 初始化自动更新。必须在打开窗口之前调用。
+/// 初始化 auto_update，启动时自动检查更新（check_on_start 默认开启）
 fn init_auto_update(cx: &mut App) {
-    let mut config = AutoUpdateConfig::parse(env!("CARGO_PKG_VERSION"), UPDATE_MANIFEST_URL)
-        .expect("CARGO_PKG_VERSION 是合法 semver")
-        .with_installer(InstallerConfig::inno_setup());
+    let current_version =
+        Version::parse(env!("CARGO_PKG_VERSION")).expect("CARGO_PKG_VERSION 不是合法 semver");
+    let public_key = (!UPDATE_PUBLIC_KEY.is_empty()).then(|| UPDATE_PUBLIC_KEY.to_owned());
 
-    if !UPDATE_PUBLIC_KEY.is_empty() {
-        config = config.with_public_key(UPDATE_PUBLIC_KEY);
-    }
+    let config = AutoUpdateConfig::builder()
+        .current_version(current_version)
+        .manifest_url(UPDATE_MANIFEST_URL)
+        .maybe_public_key(public_key)
+        // 发布物是 Inno Setup 安装包，退出时按当前安装位置静默安装
+        .installer_config(InstallerConfig::inno_setup())
+        .build();
 
     AutoUpdater::init(cx, config);
 }
