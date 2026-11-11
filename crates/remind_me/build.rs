@@ -15,7 +15,7 @@ fn main() {
         let mut res = winresource::WindowsResource::new();
         res.set_icon(&icon_path.to_string_lossy())
             .set("CompanyName", "YBKF")
-            .set("FileDescription", "一个高效的日程提醒工具")
+            .set("FileDescription", "RemindMe")
             .set("InternalName", "remind-me")
             .set("FileVersion", &version);
         res.compile().unwrap();

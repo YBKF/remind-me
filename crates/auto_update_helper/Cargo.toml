@@ -13,5 +13,8 @@ path = "src/auto_update_helper.rs"
 anyhow.workspace = true
 clap.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
 [build-dependencies]
 winresource.workspace = true

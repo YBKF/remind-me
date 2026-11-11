@@ -1,14 +1,17 @@
 use auto_update::{AutoUpdateEvent, AutoUpdateStatus, AutoUpdater};
 use gpui_kit::{
-    App, Entity, InteractiveElement, ParentElement, Render, Role, StatefulInteractiveElement,
-    Styled, Subscription, Window,
+    Entity, InteractiveElement, ParentElement, Render, Role, StatefulInteractiveElement, Styled,
+    Subscription, Window,
     assets::IconName,
+    base::{StyledExt, h_flex},
     component::{
-        Sizable, Theme, TitleBar,
+        ActiveTheme, Sizable, Theme, TitleBar,
         button::{Button, ButtonVariants},
+        progress::ProgressCircle,
     },
     div,
     prelude::{Context, IntoElement},
+    px,
 };
 
 pub struct RemindMe {
@@ -40,34 +43,121 @@ impl RemindMe {
         }
     }
 
-    fn update_label(updater: &Entity<AutoUpdater>, cx: &App) -> String {
-        let updater = updater.read(cx);
-        match updater.status() {
-            AutoUpdateStatus::Idle | AutoUpdateStatus::UpToDate { .. } => String::new(),
-            AutoUpdateStatus::Checking => "正在检查更新…".to_string(),
-            AutoUpdateStatus::UpdateAvailable { version } => {
-                format!("发现新版本 v{version}")
+    /// 当前状态对应的操作按钮，下载与安装都由用户点击触发
+    fn update_actions(
+        &self,
+        cx: &Context<Self>,
+        status: &AutoUpdateStatus,
+    ) -> Option<impl IntoElement> {
+        let theme = cx.theme();
+
+        match status {
+            AutoUpdateStatus::UpdateAvailable { .. } => {
+                let updater = self.updater.clone();
+
+                Some(
+                    Button::new("download_update")
+                        .child(div().child("发现新版本，点击下载").text_size(px(11.0)))
+                        .cursor_pointer()
+                        .mr_4()
+                        .bg(theme.title_bar)
+                        .outline()
+                        .small()
+                        .on_click(move |_, _, cx| {
+                            let _ = updater.update(cx, |updater, cx| updater.download_update(cx));
+                        })
+                        .into_any_element(),
+                )
             }
             AutoUpdateStatus::Downloading { version } => {
-                match updater.download_progress().and_then(|p| p.fraction()) {
-                    Some(fraction) => {
-                        format!("正在下载 v{version} ({:.0}%)", fraction * 100.0)
-                    }
-                    None => format!("正在下载 v{version}…"),
-                }
+                let updater = self.updater.clone();
+                let percent = self
+                    .updater
+                    .read(cx)
+                    .download_progress()
+                    .and_then(|p| p.fraction());
+
+                Some(
+                    Button::new("update_status")
+                        .cursor_pointer()
+                        .child(
+                            div()
+                                .child(match percent {
+                                    Some(fraction) => h_flex()
+                                        .items_center()
+                                        .gap_1()
+                                        .child(
+                                            ProgressCircle::new("update_download_progress")
+                                                .value(fraction * 100.0)
+                                                .small(),
+                                        )
+                                        .child(format!("{}%", (fraction * 100.0) as u8)),
+                                    None => div().child(format!("正在下载 v{version}…")),
+                                })
+                                .text_size(px(11.0)),
+                        )
+                        .mr_4()
+                        .bg(theme.title_bar)
+                        .outline()
+                        .small()
+                        .on_click(move |_, _, cx| {
+                            updater.update(cx, |updater, cx| updater.cancel(cx));
+                        })
+                        .tooltip("点击取消下载")
+                        .into_any_element(),
+                )
             }
-            AutoUpdateStatus::Downloaded { version } => {
-                format!("v{version} 已就绪，退出应用时安装")
+            AutoUpdateStatus::Downloaded { .. } => {
+                let updater = self.updater.clone();
+
+                Some(
+                    Button::new("install_update")
+                        .child(div().child("点击重启应用以更新").text_size(px(11.0)))
+                        .cursor_pointer()
+                        .mr_4()
+                        .bg(theme.title_bar)
+                        .outline()
+                        .small()
+                        .on_click(move |_, _, cx| {
+                            let installed =
+                                updater.update(cx, |updater, cx| updater.install_update(cx));
+                            if installed.is_ok() {
+                                cx.quit();
+                            }
+                        })
+                        .into_any_element(),
+                )
             }
-            AutoUpdateStatus::Installing { version } => format!("正在安装 v{version}"),
-            AutoUpdateStatus::Failed { error } => format!("更新失败：{error}"),
+            AutoUpdateStatus::Failed { error } => {
+                let updater = self.updater.clone();
+
+                Some(
+                    Button::new("update_failed")
+                        .child(div().text_size(px(11.0)).child("检查更新失败"))
+                        .mr_4()
+                        .bg(theme.title_bar)
+                        .outline()
+                        .small()
+                        .on_click(move |_, _, cx| {
+                            // 失败后点击按钮重置状态，主要是为了隐藏此按钮
+                            updater.update(cx, |updater, cx| updater.reset(cx))
+                        })
+                        .tooltip(format!("{error}"))
+                        .into_any_element(),
+                )
+            }
+            AutoUpdateStatus::Idle
+            | AutoUpdateStatus::Checking
+            | AutoUpdateStatus::UpToDate { .. }
+            | AutoUpdateStatus::Installing { .. } => None,
         }
     }
 }
 
 impl Render for RemindMe {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let update_label = Self::update_label(&self.updater, cx);
+        let status = self.updater.read(cx).status().clone();
+        let update_btn = self.update_actions(cx, &status);
 
         div()
             .id("root_view")
@@ -78,28 +168,42 @@ impl Render for RemindMe {
             .child(
                 TitleBar::new().child(
                     div()
-                        .flex()
+                        .w_full()
+                        .grid()
+                        .grid_cols(3)
                         .items_center()
-                        .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
-                            cx.stop_propagation();
-                        })
                         .child(
-                            Button::new("app_menu_btn")
-                                .ghost()
-                                .icon(IconName::Menu)
-                                .small()
-                                .cursor_pointer(),
+                            h_flex()
+                                .items_center()
+                                .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
+                                    cx.stop_propagation();
+                                })
+                                .child(
+                                    Button::new("app_menu_btn")
+                                        .ghost()
+                                        .icon(IconName::Menu)
+                                        .small()
+                                        .cursor_pointer(),
+                                ),
+                        )
+                        .child(
+                            h_flex()
+                                .justify_center()
+                                .text_size(px(12.0))
+                                .font_light()
+                                .child("Remind Me"),
+                        )
+                        .child(
+                            h_flex()
+                                .justify_end()
+                                .gap_2()
+                                .mt_0p5()
+                                .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
+                                    cx.stop_propagation()
+                                })
+                                .children(update_btn.into_iter()),
                         ),
                 ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .items_center()
-                    .justify_center()
-                    .text_sm()
-                    .child(update_label),
             )
     }
 }

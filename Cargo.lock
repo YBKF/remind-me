@@ -519,7 +519,7 @@ dependencies = [
 
 [[package]]
 name = "auto_update"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "bon",
  "gpui-kit",
@@ -539,6 +539,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "windows-sys 0.61.2",
  "winresource",
 ]
 
@@ -5418,6 +5419,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "auto_update",
+ "bon",
  "gpui-kit",
  "log",
  "rust-i18n",

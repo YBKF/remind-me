@@ -15,12 +15,37 @@ use utils::locale::detect_locale;
 
 use crate::{
     app::RemindMe,
-    constants::{UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY},
+    constants::{UPDATE_HELPER, UPDATE_MANIFEST_URL, UPDATE_PUBLIC_KEY},
 };
 
 rust_i18n::i18n!("../../locales", fallback = "en");
 
-/// 初始化 auto_update，启动时自动检查更新（check_on_start 默认开启）
+/// 安装策略：退出时由助手静默安装，安装成功后删除安装包并重启程序
+///
+/// 助手参数与安装包参数用 `--` 分隔，`launch` 追加的 `/CURRENTUSER` 或
+/// `/ALLUSERS` 落在 `--` 之后，由助手原样转交给安装包
+fn installer_config() -> InstallerConfig {
+    InstallerConfig::builder()
+        .program(UPDATE_HELPER)
+        .args(bon::vec![
+            "--installer-path",
+            "{installer}",
+            "--relaunch",
+            "{app}",
+            "--wait-pid",
+            "{pid}",
+            "--auto-remove",
+            "--",
+            "/SILENT",
+        ])
+        .per_user_args(bon::vec!["/CURRENTUSER"])
+        .per_machine_args(bon::vec!["/ALLUSERS"])
+        // 助手位于安装目录内，安装会覆盖它，先复制到临时目录再运行
+        .relocate_to(std::env::temp_dir().join("RemindMe-update-helper"))
+        .build()
+}
+
+/// 初始化 auto_update，启动时自动检查更新，下载与安装都由用户点击触发
 fn init_auto_update(cx: &mut App) {
     let current_version =
         Version::parse(env!("CARGO_PKG_VERSION")).expect("CARGO_PKG_VERSION 不是合法 semver");
@@ -30,8 +55,7 @@ fn init_auto_update(cx: &mut App) {
         .current_version(current_version)
         .manifest_url(UPDATE_MANIFEST_URL)
         .maybe_public_key(public_key)
-        // 发布物是 Inno Setup 安装包，退出时按当前安装位置静默安装
-        .installer_config(InstallerConfig::inno_setup())
+        .installer_config(installer_config())
         .build();
 
     AutoUpdater::init(cx, config);

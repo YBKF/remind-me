@@ -57,6 +57,29 @@
 //! [`InstallerConfig::msi`] 已内置判断：安装前用 [`InstallScope::detect`]
 //! 推断当前 exe 的位置，再追加对应的参数
 //!
+//! # 安装后清理与重启
+//!
+//! `InstallerConfig::launch` 只负责启动并立刻返回，安装结束后删除安装包、重新
+//! 启动程序需要另一个进程完成。配合 `auto_update_helper` 时用 `--` 分隔参数：
+//! `--` 之前是助手的参数，之后原样传给安装包，助手会等待主程序退出、执行安装
+//! 包、成功后删除安装包，再启动 `{app}`
+//!
+//! ```
+//! use auto_update::InstallerConfig;
+//!
+//! let installer_config = InstallerConfig::builder()
+//!     .program("tools/auto_update_helper.exe")
+//!     .args(bon::vec![
+//!         "--installer-path", "{installer}",
+//!         "--relaunch", "{app}",
+//!         "--wait-pid", "{pid}",
+//!         "--auto-remove",
+//!         "--",
+//!         "/SILENT",
+//!     ])
+//!     .build();
+//! ```
+//!
 //! # 平台支持
 //!
 //! 检查与下载与平台无关；安装由 [`InstallerConfig`] 描述，库不假设安装包格式

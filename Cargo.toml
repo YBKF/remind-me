@@ -26,6 +26,13 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 ureq = { version = "2", features = ["json"] }
 utils = { path = "crates/utils" }
+windows-sys = {
+  version = "0.61",
+  features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+  ]
+}
 winresource = "0.1"
 
 [profile.release]

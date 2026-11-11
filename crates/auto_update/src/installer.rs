@@ -70,7 +70,7 @@ pub struct InstallerConfig {
     #[builder(into)]
     program: Option<PathBuf>,
 
-    /// 传给程序的固定参数，`{installer}` 会替换为安装包路径
+    /// 传给程序的固定参数，支持 `{installer}`、`{app}`、`{pid}` 占位符
     #[builder(default, into)]
     args: Vec<String>,
 
@@ -177,8 +177,9 @@ impl InstallerConfig {
     /// 用 `package_path` 启动安装
     ///
     /// 运行 `program` 指定的程序，未指定时运行安装包本身；`args` 中的
-    /// `{installer}` 替换为 `package_path`；`per_user_args` 或
-    /// `per_machine_args` 按 [`InstallScope::detect`] 的结果追加
+    /// `{installer}` 替换为 `package_path`，`{app}` 替换为当前程序路径，
+    /// `{pid}` 替换为当前进程 id；`per_user_args` 或 `per_machine_args` 按
+    /// [`InstallScope::detect`] 的结果追加在最后
     ///
     /// 返回 `Ok` 表示安装进程已创建，不等待安装结束
     pub(crate) fn launch(
@@ -232,12 +233,21 @@ impl InstallerConfig {
         })
     }
 
-    /// 替换 `args` 中的 `{installer}` 占位符
+    /// 替换 `args` 中的 `{installer}`、`{app}`、`{pid}` 占位符
     fn resolve_args(&self, package_path: &Path) -> Vec<String> {
         let package = package_path.display().to_string();
+        let app = std::env::current_exe()
+            .map(|exe| exe.display().to_string())
+            .unwrap_or_default();
+        let pid = std::process::id().to_string();
+
         self.args
             .iter()
-            .map(|arg| arg.replace("{installer}", &package))
+            .map(|arg| {
+                arg.replace("{installer}", &package)
+                    .replace("{app}", &app)
+                    .replace("{pid}", &pid)
+            })
             .collect()
     }
 
@@ -431,5 +441,16 @@ mod tests {
                 "--auto-remove".to_owned(),
             ]
         );
+    }
+
+    #[test]
+    fn resolves_app_and_pid_placeholders() {
+        let installer_config = InstallerConfig::builder()
+            .args(bon::vec!["--pid", "{pid}", "--app", "{app}"])
+            .build();
+        let args = installer_config.resolve_args(Path::new("Setup.exe"));
+
+        assert_eq!(args[1], std::process::id().to_string());
+        assert!(Path::new(&args[3]).exists());
     }
 }
