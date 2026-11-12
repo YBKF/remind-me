@@ -1,0 +1,91 @@
+{
+  "name": "i18n-lens",
+  "displayName": "i18n Lens",
+  "description": "为 rust-i18n 单文件多语言格式（_version: 2，语言位于叶子）提供行内译文、悬停对照、跳转与缺失检查",
+  "version": "0.1.0",
+  "publisher": "remind-me",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:rust"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "i18nLens.reload",
+        "title": "重新加载语言文件",
+        "category": "i18n Lens"
+      }
+    ],
+    "configuration": {
+      "title": "i18n Lens",
+      "properties": {
+        "i18nLens.localesPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "locales"
+          ],
+          "description": "语言文件目录（相对工作区根目录）"
+        },
+        "i18nLens.sourceLanguage": {
+          "type": "string",
+          "default": "en",
+          "description": "源语言，显示顺序与回退目标"
+        },
+        "i18nLens.displayLanguage": {
+          "type": "string",
+          "default": "",
+          "description": "行内注解使用的语言，留空则跟随编辑器显示语言"
+        },
+        "i18nLens.annotation.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "在 t! 调用行尾显示译文"
+        },
+        "i18nLens.annotation.missing": {
+          "type": "boolean",
+          "default": true,
+          "description": "键未定义或当前语言缺译时也显示提示"
+        },
+        "i18nLens.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "检查未定义的键与缺失的译文"
+        },
+        "i18nLens.ignoreKeyPrefixes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "跳过检查的键前缀，用于 extend! 引入的外部 crate 命名空间"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js --sourcemap",
+    "watch": "npm run compile -- --watch",
+    "check": "tsc --noEmit",
+    "package": "npm run check && npm run compile -- --minify && npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.2"
+  }
+}

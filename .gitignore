@@ -62,3 +62,9 @@ crates/docs_preprocessor/actions.json
 .nixos-test-history
 
 .local*
+
+# i18n Lens 扩展
+/tools/i18n-lens/node_modules/
+/tools/i18n-lens/dist/
+/tools/i18n-lens/*.vsix
+
