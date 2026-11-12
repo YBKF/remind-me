@@ -48,7 +48,7 @@ fn installer_config() -> InstallerConfig {
 /// 初始化 auto_update，启动时自动检查更新，下载与安装都由用户点击触发
 fn init_auto_update(cx: &mut App) {
     let current_version =
-        Version::parse(env!("CARGO_PKG_VERSION")).expect("CARGO_PKG_VERSION 不是合法 semver");
+        Version::parse(env!("CARGO_PKG_VERSION")).expect("CARGO_PKG_VERSION is not a legal semver");
     let public_key = (!UPDATE_PUBLIC_KEY.is_empty()).then(|| UPDATE_PUBLIC_KEY.to_owned());
 
     let config = AutoUpdateConfig::builder()

@@ -13,6 +13,7 @@ use gpui_kit::{
     prelude::{Context, IntoElement},
     px,
 };
+use rust_i18n::t;
 
 pub struct RemindMe {
     /// 系统明暗外观变化时同步主题。持有订阅，丢弃即取消。
@@ -30,7 +31,8 @@ impl RemindMe {
         });
 
         // 更新器在 main 里通过 `AutoUpdater::init` 注册为全局单例。
-        let updater = AutoUpdater::global(cx).expect("init_auto_update 必须在打开窗口前调用");
+        let updater =
+            AutoUpdater::global(cx).expect("init_auto_update must be called before open window");
         let _update_sub = cx.subscribe(
             &updater,
             |_, _: Entity<AutoUpdater>, _: &AutoUpdateEvent, cx| cx.notify(),
@@ -57,7 +59,11 @@ impl RemindMe {
 
                 Some(
                     Button::new("download_update")
-                        .child(div().child("发现新版本，点击下载").text_size(px(11.0)))
+                        .child(
+                            div()
+                                .child(t!("update.title-bar-btn.update-available.text"))
+                                .text_size(px(11.0)),
+                        )
                         .cursor_pointer()
                         .mr_4()
                         .bg(theme.title_bar)
@@ -92,7 +98,10 @@ impl RemindMe {
                                                 .small(),
                                         )
                                         .child(format!("{}%", (fraction * 100.0) as u8)),
-                                    None => div().child(format!("正在下载 v{version}…")),
+                                    None => div().child(t!(
+                                        "update.title-bar-btn.downloading.text",
+                                        version = version
+                                    )),
                                 })
                                 .text_size(px(11.0)),
                         )
@@ -112,7 +121,11 @@ impl RemindMe {
 
                 Some(
                     Button::new("install_update")
-                        .child(div().child("点击重启应用以更新").text_size(px(11.0)))
+                        .child(
+                            div()
+                                .child(t!("update.title-bar-btn.downloaded.text"))
+                                .text_size(px(11.0)),
+                        )
                         .cursor_pointer()
                         .mr_4()
                         .bg(theme.title_bar)
@@ -133,7 +146,11 @@ impl RemindMe {
 
                 Some(
                     Button::new("update_failed")
-                        .child(div().text_size(px(11.0)).child("检查更新失败"))
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .child(t!("update.title-bar-btn.failed.text")),
+                        )
                         .mr_4()
                         .bg(theme.title_bar)
                         .outline()
@@ -191,7 +208,7 @@ impl Render for RemindMe {
                                 .justify_center()
                                 .text_size(px(12.0))
                                 .font_light()
-                                .child("Remind Me"),
+                                .child(t!("app.name", locale = "en")), // 为了字体美观性而使用了英文（英文更适配 light 字体）
                         )
                         .child(
                             h_flex()

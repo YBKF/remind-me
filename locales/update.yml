@@ -1,0 +1,24 @@
+_version: 2
+
+update:
+  title-bar-btn:
+    update-available:
+      text:
+        zh-CN: "发现新版本，点击下载"
+        zh-TW: "發現新版本，點擊下載"
+        en: "New version available"
+    downloading:
+      text:
+        zh-CN: "正在下载 v{version}…"
+        zh-TW: "正在下載 v{version}…"
+        en: "Downloading v{version}…"
+    downloaded:
+      text:
+        zh-CN: "点击重启应用以更新"
+        zh-TW: "點擊重啟應用以更新"
+        en: "Click to restart to update"
+    failed:
+      text:
+        zh-CN: "检查更新失败"
+        zh-TW: "檢查更新失敗"
+        en: "Check for updates failed"
