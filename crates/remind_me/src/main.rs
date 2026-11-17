@@ -82,8 +82,8 @@ fn main() {
             init_auto_update(cx);
 
             let options = WindowOptions {
-                window_bounds: Some(WindowBounds::centered(size(px(960.), px(540.)), cx)),
-                window_min_size: Some(size(px(780.), px(440.))),
+                window_bounds: Some(WindowBounds::centered(None, size(px(960.), px(540.)), cx)),
+                window_min_size: Some(size(px(480.), px(270.))),
                 titlebar: Some(TitleBar::title_bar_options()),
                 ..Default::default()
             };

@@ -12,7 +12,7 @@ anyhow = "1"
 auto_update = { path = "crates/auto_update" }
 bon = "3"
 clap = { version = "4", features = ["derive"] }
-gpui-kit = "0.9"
+gpui-kit = { version = "0.10", features = ["gpui-fast"] }
 log = "0.4"
 minisign-verify = "0.2"
 rust-i18n = "4"
